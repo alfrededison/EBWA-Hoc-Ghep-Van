@@ -1,0 +1,9 @@
+{
+  "id": "ghep-van",
+  "name": "Ghép vần",
+  "author": "Hieu Nguyen",
+  "description": "Ứng dụng luyện ghép vần tiếng Việt cho màn hình e-ink.",
+  "entry": "index.html",
+  "version": "1.0.0-2",
+  "icon": "icon.png"
+}
