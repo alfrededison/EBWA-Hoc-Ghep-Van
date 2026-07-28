@@ -53,6 +53,9 @@ RAW.g.forEach(([name, rimeList], gi) => {
 
 const $ = (s, r) => (r || document).querySelector(s);
 const stage = $("#stage"), ctl = $("#ctl"), ctl2 = $("#ctl2");
+// di vong trong danh sach: qua cuoi thi ve dau, lui truoc dau thi ra cuoi
+const mod = (i, n) => ((i % n) + n) % n;
+const randIdx = n => Math.random() * n | 0;
 const state = {
   mode: "alpha",
   level: "1",
@@ -91,13 +94,12 @@ function pickItem(delta) {
   const p = modePool();
   if (!p.length) { state.item = null; return; }
   if (ord() === "seq") {
-    let i = state.idx[state.mode] + (delta || 0);
-    i = ((i % p.length) + p.length) % p.length;
+    const i = mod(state.idx[state.mode] + (delta || 0), p.length);
     state.idx[state.mode] = i;
     state.item = p[i];
   } else {
     let pick, guard = 0;
-    do { pick = p[Math.random() * p.length | 0]; guard++; }
+    do { pick = p[randIdx(p.length)]; guard++; }
     while (state.item && p.length > 1 && pick.s === state.item.s && guard < 12);
     state.item = pick;
   }
@@ -111,14 +113,16 @@ function syncIdx() {
   state.idx[state.mode] = i < 0 ? 0 : i;
 }
 
-/* ---------- ve giao dien ---------- */
-function ruled(inner) {
-  return `<div class="ruled"><div class="mid"></div>${inner}</div>`;
-}
-function orderBtn() {
-  return `<button class="small" id="ord">${ord() === "seq" ? "Thứ tự" : "Ngẫu nhiên"}</button>`;
-}
-function counter(i, total) { return `<div class="count">${i + 1}/${total}</div>`; }
+/* ---------- cac manh giao dien ---------- */
+const ruled = inner => `<div class="ruled"><div class="mid"></div>${inner}</div>`;
+const glyph = (s, cls) => `<div class="glyph${cls ? " " + cls : ""}">${s}</div>`;
+const cue = (t, cls) => `<div class="cue${cls ? " " + cls : ""}">${t}</div>`;
+const hint = t => `<div class="hint">${t}</div>`;
+const counter = (i, total) => `<div class="count">${i + 1}/${total}</div>`;
+const orderBtn = () => `<button class="small" id="ord">${ord() === "seq" ? "Thứ tự" : "Ngẫu nhiên"}</button>`;
+// hai nut bam dinh (Chu don / Chu ghep): [{id, label, on}]
+const chipRow = cs => `<div class="chips">`
+  + cs.map(c => `<button id="${c.id}" aria-pressed="${c.on}">${c.label}</button>`).join("") + `</div>`;
 function wire(id, fn) { const b = $("#" + id); if (b) b.onclick = fn; }
 
 function render() {
@@ -131,7 +135,7 @@ function render() {
   });
 }
 
-function levelPicker(extra) {
+function levelPicker() {
   const opts = Object.keys(DATA.levels)
     .map(k => `<option value="${k}"${k === state.level ? " selected" : ""}>Mức ${k} — ${DATA.levels[k].name}</option>`).join("");
   const rs = rimesOfLevel(state.level);
@@ -139,136 +143,140 @@ function levelPicker(extra) {
     .concat(rs.map(r => `<option value="${r.r}"${r.r === state.rime ? " selected" : ""}>vần ${r.r}</option>`)).join("");
   ctl2.innerHTML =
     `<select id="lv" aria-label="Chọn mức">${opts}</select>` +
-    `<select id="rm" aria-label="Chọn vần">${ropts}</select>` + (extra || "");
+    `<select id="rm" aria-label="Chọn vần">${ropts}</select>`;
   $("#lv").onchange = e => { state.level = e.target.value; state.rime = "*"; restart(); };
   $("#rm").onchange = e => { state.rime = e.target.value; restart(); };
 }
 function restart() { state.idx[state.mode] = 0; state.item = null; render(); }
 
+/* ---------- khung chung cho hai the "danh sach" (Chu cai, Nguyen am) ----------
+   Mot danh sach phang, di lui/tien theo thu tu hoac nhay ngau nhien.
+   labels: {prev, next, rnd}; wide: nhan dai thi thu nho cho vua mot hang. */
+function drawList({ key, list, labels, wide, body }) {
+  const n = list.length;
+  if (state.idx[key] >= n) state.idx[key] = 0;
+  const i = state.idx[key], seq = ord() === "seq";
+  stage.innerHTML = body(list[i]);
+  const cls = wide ? "big long" : "big";
+  ctl.innerHTML = (seq
+      ? `<button class="${cls}" id="prev">${labels.prev}</button>`
+        + `<button class="${cls} solid" id="next">${labels.next}</button>`
+      : `<button class="big solid" id="next">${labels.rnd}</button>`)
+    + orderBtn() + counter(i, n);
+  const go = j => { state.idx[key] = j; render(); };
+  wire("prev", () => go(mod(i - 1, n)));
+  wire("next", () => go(seq ? mod(i + 1, n) : randIdx(n)));
+}
+
+/* ---------- khung chung cho hai the "mot tieng" (Ghep van, Doc tron) ----------
+   Lay mot tieng tu pool theo muc/van dang chon, kem nut lui/tien va mot nut rieng.
+   derive: cac gia tri tinh tu tieng, dung chung cho body/goLabel/onGo.
+   extra:  ham tra ve {id, label, fn} — goi sau pickItem de doc dung state. */
+function drawItem({ key, empty, derive, body, goLabel, onGo, extra }) {
+  if (!state.item) pickItem(0);
+  const it = state.item;
+  if (!it) {
+    stage.innerHTML = cue(empty);
+    ctl.innerHTML = orderBtn();
+    levelPicker();
+    return;
+  }
+  const seq = ord() === "seq", d = derive ? derive(it) : null, ex = extra();
+  stage.innerHTML = body(it, d);
+  ctl.innerHTML = (seq ? `<button class="small" id="prev">Trước</button>` : "")
+    + `<button class="big solid" id="go">${goLabel(seq, d)}</button>`
+    + `<button class="small" id="${ex.id}">${ex.label}</button>` + orderBtn()
+    + (seq ? counter(state.idx[key], modePool().length) : `<div class="count">Đã đọc ${state.count}</div>`);
+  wire("go", () => { onGo(seq, d); render(); });
+  wire("prev", () => { pickItem(-1); render(); });
+  wire(ex.id, () => { ex.fn(); render(); });
+  levelPicker();
+}
+
 /* --- 1. Bang chu cai (trang 1) --- */
 function alphaList() { return state.alphaSet === "one" ? DATA.alpha1 : DATA.alpha2; }
 
 function drawAlpha() {
-  const list = alphaList();
-  if (state.idx.alpha >= list.length) state.idx.alpha = 0;
-  const i = state.idx.alpha, ch = list[i], say = DATA.onsetRead[ch];
-  stage.innerHTML = ruled(`<div class="glyph${ch.length > 1 ? " sm" : ""}"><span class="pair">${ch.toUpperCase()} ${ch}</span></div>`)
-    + `<div class="cue">chữ ${ch}${say ? " — đọc " + say : ""}</div>`
-    + `<div class="hint">Con cầm máy đi tìm chữ này trong nhà</div>`;
-  const step = d => { state.idx.alpha = ((i + d) % list.length + list.length) % list.length; render(); };
-  if (ord() === "seq") {
-    ctl.innerHTML = `<button class="big" id="prev">Chữ trước</button>`
-      + `<button class="big solid" id="next">Chữ sau</button>` + orderBtn() + counter(i, list.length);
-    wire("prev", () => step(-1));
-  } else {
-    ctl.innerHTML = `<button class="big solid" id="next">Chữ khác</button>` + orderBtn() + counter(i, list.length);
-  }
-  wire("next", () => {
-    if (ord() === "seq") step(1);
-    else { state.idx.alpha = Math.random() * list.length | 0; render(); }
+  drawList({
+    key: "alpha",
+    list: alphaList(),
+    labels: { prev: "Chữ trước", next: "Chữ sau", rnd: "Chữ khác" },
+    body: ch => {
+      const say = DATA.onsetRead[ch];
+      // chu ghep (2-3 ky tu) thi thu nho lai cho vua dong ke
+      return ruled(glyph(`<span class="pair">${ch.toUpperCase()} ${ch}</span>`, ch.length > 1 ? "sm" : ""))
+        + cue(`chữ ${ch}${say ? " — đọc " + say : ""}`)
+        + hint("Con cầm máy đi tìm chữ này trong nhà");
+    },
   });
-  ctl2.innerHTML = `<div class="chips">`
-    + `<button id="s1" aria-pressed="${state.alphaSet === "one"}">Chữ đơn</button>`
-    + `<button id="s2" aria-pressed="${state.alphaSet === "duo"}">Chữ ghép</button>`
-    + `</div>`;
-  wire("s1", () => { state.alphaSet = "one"; state.idx.alpha = 0; render(); });
-  wire("s2", () => { state.alphaSet = "duo"; state.idx.alpha = 0; render(); });
+  ctl2.innerHTML = chipRow([
+    { id: "s1", label: "Chữ đơn", on: state.alphaSet === "one" },
+    { id: "s2", label: "Chữ ghép", on: state.alphaSet === "duo" },
+  ]);
+  const setAlpha = v => { state.alphaSet = v; state.idx.alpha = 0; render(); };
+  wire("s1", () => setAlpha("one"));
+  wire("s2", () => setAlpha("duo"));
 }
 
 /* --- 2. Nguyen am va dau thanh (trang 3) --- */
 function drawVowel() {
-  const list = DATA.vowels, i = state.idx.vowel, v = list[i];
-  const cells = toneForms(v).map((s, k) =>
-    `<div class="cell"><b>${s}</b><span>${DATA.toneName[k]}</span></div>`).join("");
-  stage.innerHTML =
-    `<div class="cue" style="margin:0 0 3vmin">nguyên âm ${v} — 6 dấu thanh</div>`
-    + `<div class="grid6">${cells}</div>`
-    + `<div class="hint">Đọc lần lượt 6 ô. Rồi bố đọc một tiếng, con chỉ vào ô đúng.</div>`;
-  const step = d => { state.idx.vowel = ((i + d) % list.length + list.length) % list.length; render(); };
-  // nhan dai nen dung class "long" cho vua mot hang
-  if (ord() === "seq") {
-    ctl.innerHTML = `<button class="big long" id="prev">Nguyên âm trước</button>`
-      + `<button class="big long solid" id="next">Nguyên âm sau</button>`
-      + orderBtn() + counter(i, list.length);
-    wire("prev", () => step(-1));
-  } else {
-    ctl.innerHTML = `<button class="big solid" id="next">Nguyên âm khác</button>`
-      + orderBtn() + counter(i, list.length);
-  }
-  wire("next", () => {
-    if (ord() === "seq") step(1);
-    else { state.idx.vowel = Math.random() * list.length | 0; render(); }
+  drawList({
+    key: "vowel",
+    list: DATA.vowels,
+    labels: { prev: "Nguyên âm trước", next: "Nguyên âm sau", rnd: "Nguyên âm khác" },
+    wide: true,
+    body: v => cue(`nguyên âm ${v} — 6 dấu thanh`, "top")
+      + `<div class="grid6">` + toneForms(v).map((s, k) =>
+          `<div class="cell"><b>${s}</b><span>${DATA.toneName[k]}</span></div>`).join("") + `</div>`
+      + hint("Đọc lần lượt 6 ô. Rồi bố đọc một tiếng, con chỉ vào ô đúng."),
   });
 }
 
 /* --- 3. Ghep van --- */
 function drawBlend() {
-  if (!state.item) pickItem(0);
-  const it = state.item;
-  if (!it) {
-    stage.innerHTML = `<p class="cue">Vần này chưa có tiếng để ghép.<br>Chọn vần khác nhé.</p>`;
-    ctl.innerHTML = orderBtn(); levelPicker(); return;
-  }
-  const seq = ord() === "seq", total = modePool().length;
-  const base = deTone(it.s);
-  // Van dong (ket thuc bang p, t, c, ch) khong the mang thanh ngang:
-  // dat dau thanh ngay tren van, bo buoc trung gian khong dau.
-  const closed = /(?:ch|[ptc])$/.test(it.rime);
-  const shownRime = closed ? it.s.slice(it.o.length) : it.rime;
-  const threeStep = it.t !== 0 && !closed;
-  const last = threeStep ? 2 : 1;
-
-  if (state.step === 0) {
-    stage.innerHTML = ruled(
-      `<div class="pieces"><div class="piece">${it.o}</div><div class="plus">+</div><div class="piece">${shownRime}</div></div>`
-    ) + `<div class="cue">${DATA.onsetRead[it.o]} — ${shownRime}</div>`
-      + `<div class="hint">Bố đọc mẫu một lần, rồi để con đọc lại</div>`;
-  } else if (state.step === 1 && threeStep) {
-    stage.innerHTML = ruled(`<div class="glyph">${base}</div>`)
-      + `<div class="cue">${DATA.onsetRead[it.o]} — ${it.rime} — ${base}</div>`;
-  } else {
-    stage.innerHTML = ruled(`<div class="glyph">${it.s}</div>`)
-      + `<div class="cue">${threeStep
-          ? base + " — " + DATA.toneRead[it.t] + " — " + it.s
-          : DATA.onsetRead[it.o] + " — " + shownRime + " — " + it.s}</div>`
-      + (it.w ? "" : `<div class="hint">Tiếng luyện ghép — chưa cần hiểu nghĩa</div>`);
-  }
-
-  const lastStep = state.step >= last;
-  ctl.innerHTML = (seq ? `<button class="small" id="prev">Trước</button>` : "")
-    + `<button class="big solid" id="go">${lastStep ? (seq ? "Tiếng sau" : "Tiếng mới") : "Đọc tiếp"}</button>`
-    + `<button class="small" id="again">Đọc lại</button>` + orderBtn()
-    + (seq ? counter(state.idx.blend, total) : `<div class="count">Đã đọc ${state.count}</div>`);
-  wire("go", () => {
-    if (lastStep) { state.count++; pickItem(seq ? 1 : 0); } else { state.step++; }
-    render();
+  drawItem({
+    key: "blend",
+    empty: "Vần này chưa có tiếng để ghép.<br>Chọn vần khác nhé.",
+    // Van dong (ket thuc bang p, t, c, ch) khong the mang thanh ngang:
+    // dat dau thanh ngay tren van, bo buoc trung gian khong dau.
+    derive(it) {
+      const closed = /(?:ch|[ptc])$/.test(it.rime);
+      const three = it.t !== 0 && !closed;
+      return { rime: closed ? it.s.slice(it.o.length) : it.rime, three, lastStep: state.step >= (three ? 2 : 1) };
+    },
+    body(it, d) {
+      const say = DATA.onsetRead[it.o], base = deTone(it.s);
+      if (state.step === 0)
+        return ruled(`<div class="pieces"><div class="piece">${it.o}</div><div class="plus">+</div><div class="piece">${d.rime}</div></div>`)
+          + cue(`${say} — ${d.rime}`)
+          + hint("Bố đọc mẫu một lần, rồi để con đọc lại");
+      if (state.step === 1 && d.three)
+        return ruled(glyph(base)) + cue(`${say} — ${it.rime} — ${base}`);
+      return ruled(glyph(it.s))
+        + cue(d.three ? `${base} — ${DATA.toneRead[it.t]} — ${it.s}`
+                      : `${say} — ${d.rime} — ${it.s}`)
+        + (it.w ? "" : hint("Tiếng luyện ghép — chưa cần hiểu nghĩa"));
+    },
+    goLabel: (seq, d) => d.lastStep ? (seq ? "Tiếng sau" : "Tiếng mới") : "Đọc tiếp",
+    onGo(seq, d) { if (d.lastStep) { state.count++; pickItem(seq ? 1 : 0); } else state.step++; },
+    extra: () => ({ id: "again", label: "Đọc lại", fn: () => state.step = 0 }),
   });
-  wire("prev", () => { pickItem(-1); render(); });
-  wire("again", () => { state.step = 0; render(); });
-  levelPicker();
 }
 
 /* --- 4. Doc tron --- */
 function drawRead() {
-  if (!state.item) pickItem(0);
-  const it = state.item;
-  if (!it) {
-    stage.innerHTML = `<p class="cue">Vần này chưa có tiếng có nghĩa.<br>Chọn vần khác nhé.</p>`;
-    ctl.innerHTML = orderBtn(); levelPicker(); return;
-  }
-  const seq = ord() === "seq", total = modePool().length;
-  stage.innerHTML = ruled(`<div class="glyph">${it.s}</div>`)
-    + (state.revealed
-        ? `<div class="cue">${it.o ? DATA.onsetRead[it.o] + " — " + it.rime + " — " : "vần " + it.rime + " — "}${deTone(it.s)}${it.t ? " — " + DATA.toneRead[it.t] + " — " + it.s : ""}</div>`
-        : `<div class="hint">Con đọc — hoặc con ra đề cho bố đọc</div>`);
-  ctl.innerHTML = (seq ? `<button class="small" id="prev">Trước</button>` : "")
-    + `<button class="big solid" id="go">${seq ? "Tiếng sau" : "Tiếng mới"}</button>`
-    + `<button class="small" id="rv">${state.revealed ? "Ẩn" : "Cách ghép"}</button>` + orderBtn()
-    + (seq ? counter(state.idx.read, total) : `<div class="count">Đã đọc ${state.count}</div>`);
-  wire("go", () => { state.count++; pickItem(seq ? 1 : 0); render(); });
-  wire("prev", () => { pickItem(-1); render(); });
-  wire("rv", () => { state.revealed = !state.revealed; render(); });
-  levelPicker();
+  drawItem({
+    key: "read",
+    empty: "Vần này chưa có tiếng có nghĩa.<br>Chọn vần khác nhé.",
+    body: it => ruled(glyph(it.s)) + (state.revealed
+      ? cue((it.o ? `${DATA.onsetRead[it.o]} — ${it.rime} — ` : `vần ${it.rime} — `)
+            + deTone(it.s) + (it.t ? ` — ${DATA.toneRead[it.t]} — ${it.s}` : ""))
+      : hint("Con đọc — hoặc con ra đề cho bố đọc")),
+    goLabel: seq => seq ? "Tiếng sau" : "Tiếng mới",
+    onGo: seq => { state.count++; pickItem(seq ? 1 : 0); },
+    extra: () => ({ id: "rv", label: state.revealed ? "Ẩn" : "Cách ghép",
+                    fn: () => state.revealed = !state.revealed }),
+  });
 }
 
 /* ---------- dieu khien chung ---------- */
