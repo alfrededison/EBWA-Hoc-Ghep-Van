@@ -56,6 +56,30 @@ const stage = $("#stage"), ctl = $("#ctl"), ctl2 = $("#ctl2");
 // di vong trong danh sach: qua cuoi thi ve dau, lui truoc dau thi ra cuoi
 const mod = (i, n) => ((i % n) + n) % n;
 const randIdx = n => Math.random() * n | 0;
+/* ---------- ngau nhien kieu "rut the" ----------
+   Random thuan tuy lap lai qua som (29 chu, bam 3 lan da trung) va co the
+   rut lai dung the dang xem. Nen tron ca bo mot lan roi rut lan luot,
+   het bo moi tron lai: khong the lap cho den khi da di qua het bo. */
+const shuffle = n => {
+  const a = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) { const j = randIdx(i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+};
+const bags = {};
+// key: moi the mot bo rieng. sig: bo doi (doi muc/van/kieu chu) thi tron bo moi.
+// cur: the dang xem, dung de tranh lap ngay khi vua tron lai bo.
+function drawNext(key, n, sig, cur) {
+  let b = bags[key];
+  if (!b || b.sig !== sig || b.order.length !== n) b = bags[key] = { sig, order: shuffle(n), pos: 0 };
+  if (b.pos >= n) {
+    b.order = shuffle(n); b.pos = 0;
+    if (n > 1 && b.order[0] === cur) {
+      const j = 1 + randIdx(n - 1);
+      [b.order[0], b.order[j]] = [b.order[j], b.order[0]];
+    }
+  }
+  return b.order[b.pos++];
+}
 const state = {
   mode: "alpha",
   level: "1",
@@ -98,10 +122,9 @@ function pickItem(delta) {
     state.idx[state.mode] = i;
     state.item = p[i];
   } else {
-    let pick, guard = 0;
-    do { pick = p[randIdx(p.length)]; guard++; }
-    while (state.item && p.length > 1 && pick.s === state.item.s && guard < 12);
-    state.item = pick;
+    const i = drawNext(state.mode, p.length, `${state.level}|${state.rime}`, state.idx[state.mode]);
+    state.idx[state.mode] = i;
+    state.item = p[i];
   }
   state.step = 0;
   state.revealed = false;
@@ -152,7 +175,7 @@ function restart() { state.idx[state.mode] = 0; state.item = null; render(); }
 /* ---------- khung chung cho hai the "danh sach" (Chu cai, Nguyen am) ----------
    Mot danh sach phang, di lui/tien theo thu tu hoac nhay ngau nhien.
    labels: {prev, next, rnd}; wide: nhan dai thi thu nho cho vua mot hang. */
-function drawList({ key, list, labels, wide, body }) {
+function drawList({ key, list, labels, wide, body, sig }) {
   const n = list.length;
   if (state.idx[key] >= n) state.idx[key] = 0;
   const i = state.idx[key], seq = ord() === "seq";
@@ -165,7 +188,7 @@ function drawList({ key, list, labels, wide, body }) {
     + orderBtn() + counter(i, n);
   const go = j => { state.idx[key] = j; render(); };
   wire("prev", () => go(mod(i - 1, n)));
-  wire("next", () => go(seq ? mod(i + 1, n) : randIdx(n)));
+  wire("next", () => go(seq ? mod(i + 1, n) : drawNext(key, n, sig || key, i)));
 }
 
 /* ---------- khung chung cho hai the "mot tieng" (Ghep van, Doc tron) ----------
@@ -200,6 +223,7 @@ function drawAlpha() {
   drawList({
     key: "alpha",
     list: alphaList(),
+    sig: state.alphaSet,
     labels: { prev: "Chữ trước", next: "Chữ sau", rnd: "Chữ khác" },
     body: ch => {
       const say = DATA.onsetRead[ch];
