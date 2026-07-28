@@ -28,6 +28,8 @@
   }
   #tabs button:last-child { border-right: none; }
   #tabs button[aria-selected="true"] { background: #000; color: #fff; }
+  /* nut huong dan nam o goc tren cung, khong chiem cho o thanh dieu khien duoi */
+  #tabs #hp { flex: 0 0 auto; padding: 10px 15px; border-left: 3px solid #000; }
 
   /* ---- vung hien thi ---- */
   main { flex: 1 1 auto; display: flex; flex-direction: column;
@@ -70,8 +72,10 @@
   .row { display: flex; gap: 8px; }
   .row + .row { margin-top: 8px; }
   .row:empty { display: none; }
-  .big { flex: 1; padding: 16px 8px; font-size: 20px; font-weight: 700; }
+  .big { flex: 1; padding: 16px 8px; font-size: 20px; font-weight: 700; white-space: nowrap; }
   .big.solid { background: #000; color: #fff; }
+  /* nhan dai ("Nguyen am truoc") thi thu nho lai cho vua mot hang */
+  .big.long { padding: 16px 4px; font-size: 15px; }
   .small { padding: 9px 10px; font-size: 14px; font-weight: 700; }
   select { padding: 9px 8px; font-size: 14px; font-weight: 700; flex: 1; min-width: 0; }
   .chips { display: flex; gap: 6px; flex: 1; }
@@ -99,6 +103,7 @@
   <button data-mode="vowel" aria-selected="false">Nguyên âm</button>
   <button data-mode="blend" aria-selected="false">Ghép vần</button>
   <button data-mode="read" aria-selected="false">Đọc trơn</button>
+  <button id="hp" aria-label="Hướng dẫn">?</button>
 </div>
 
 <main id="stage"></main>
@@ -133,6 +138,10 @@
 
   <h3>Chọn mức</h3>
   <p>13 mức xếp theo thứ tự trong sách, mức 1 dễ nhất. Cả năm trước lớp 1 chỉ cần chắc mức 1–5. Ô chọn vần bên cạnh để luyện riêng một vần.</p>
+
+  <h3>Thứ tự hay ngẫu nhiên</h3>
+  <p>Cả bốn thẻ đều có nút đổi chế độ. <b>Thứ tự</b> đi đúng thứ tự trong sách, có hai nút lùi/tiến (<b>Chữ trước – Chữ sau</b>, <b>Nguyên âm trước – Nguyên âm sau</b>, <b>Trước – Tiếng sau</b>), số bên phải cho biết đang ở đâu (ví dụ 12/272) — dùng khi học bài mới. <b>Ngẫu nhiên</b> nhảy lung tung, chỉ một nút đi tiếp — dùng khi ôn lại.</p>
+  <p>Trong Ghép vần và Đọc trơn, thứ tự sách là: hết một dấu thanh mới sang dấu khác (không dấu → sắc → huyền → hỏi → ngã → nặng), mỗi dấu thì đi lần lượt các âm đầu.</p>
 
   <h3>Lưu ý</h3>
   <p>Toàn bộ nội dung lấy từ sách <i>Ghép vần tiếng Việt</i>: 143 vần, 3797 tiếng để ghép vần, trong đó 3118 tiếng có nghĩa dùng cho Đọc trơn. Số đếm sẽ về 0 khi tải lại trang.</p>
